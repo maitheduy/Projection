@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Attractor 4 hàm co với phép quay</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { display: flex; flex-direction: column; align-items: center; }
+        #graph { width: 800px; height: 600px; }
+        .control-panel {
+            width: 400px;
+            margin: 20px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .slider-container {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .slider { width: 100%; }
+        .value-input {
+            width: 80px;
+            padding: 5px;
+            text-align: center;
+        }
+        .value-display {
+            text-align: center;
+            font-size: 18px;
+            margin-top: 10px;
+        }
+        .prob-display {
+            margin-top: 10px;
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .prob-display th, .prob-display td {
+            padding: 5px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Attractor 4 hàm co với phép quay</h1>
+        <div id="graph"></div>
+        
+        <div class="control-panel">
+            <div class="slider-container">
+                <input type="range" min="0.01" max="0.618" step="0.001" value="0.333" class="slider" id="lambdaSlider">
+                <input type="number" min="0.01" max="0.618" step="0.001" value="0.333" class="value-input" id="lambdaInput">
+            </div>
+            <div class="value-display">Giá trị λ: <span id="lambdaValue">1/3 ≈ 0.333</span></div>
+            
+            <table class="prob-display">
+                <tr>
+                    <th>Hàm</th>
+                    <th>Định thức</th>
+                    <th>Xác suất</th>
+                </tr>
+                <tr>
+                    <td>f₁ (quay π/2)</td>
+                    <td id="det1">0.111</td>
+                    <td id="prob1">25%</td>
+                </tr>
+                <tr>
+                    <td>f₂ (co λ)</td>
+                    <td id="det2">0.111</td>
+                    <td id="prob2">25%</td>
+                </tr>
+                <tr>
+                    <td>f₃ (quay 3π/2)</td>
+                    <td id="det3">0.111</td>
+                    <td id="prob3">25%</td>
+                </tr>
+                <tr>
+                    <td>f₄ (co + dịch)</td>
+                    <td id="det4">0.370</td>
+                    <td id="prob4">25%</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Khởi tạo với λ = 1/3
+        let lambda = 1/3;
+        const maxPoints = 50000;
+        const burnIn = 100;
+        const goldenRatio = (Math.sqrt(5) - 1) / 2;
+
+        // Màu sắc cho 4 hàm
+        const colors = [
+            '#FF0000', // Đỏ - f1
+            '#00FF00', // Xanh lá - f2
+            '#0000FF', // Xanh dương - f3
+            '#FF00FF'  // Tím - f4
+        ];
+
+        // Lấy các phần tử DOM
+        const slider = document.getElementById('lambdaSlider');
+        const input = document.getElementById('lambdaInput');
+        const lambdaValue = document.getElementById('lambdaValue');
+        const graphDiv = document.getElementById('graph');
+        const detElements = [document.getElementById('det1'), document.getElementById('det2'), 
+                           document.getElementById('det3'), document.getElementById('det4')];
+        const probElements = [document.getElementById('prob1'), document.getElementById('prob2'),
+                            document.getElementById('prob3'), document.getElementById('prob4')];
+
+        // Cập nhật giá trị lambda từ slider
+        slider.addEventListener('input', function() {
+            lambda = parseFloat(this.value);
+            input.value = lambda.toFixed(3);
+            updateDisplay();
+            updateAttractor();
+        });
+
+        // Cập nhật giá trị lambda từ input
+        input.addEventListener('change', function() {
+            let newValue = parseFloat(this.value);
+            if (isNaN(newValue)) newValue = 0.01;
+            if (newValue < 0.01) newValue = 0.01;
+            if (newValue > goldenRatio) newValue = goldenRatio;
+            
+            lambda = newValue;
+            slider.value = lambda;
+            this.value = lambda.toFixed(3);
+            updateDisplay();
+            updateAttractor();
+        });
+
+        // Ma trận quay π/2 (90 độ)
+        function rotatePiOver2(x, y) {
+            return [-y, x]; // [cos(π/2) -sin(π/2)] [x] = [0 -1][x] = [-y]
+                           // [sin(π/2)  cos(π/2)] [y]   [1  0][y]   [x]
+        }
+
+        // Ma trận quay 3π/2 (270 độ)
+        function rotate3PiOver2(x, y) {
+            return [y, -x]; // [cos(3π/2) -sin(3π/2)] [x] = [ 0 1][x] = [y]
+                           // [sin(3π/2)  cos(3π/2)] [y]   [-1 0][y]   [-x]
+        }
+
+        // Tính định thức cho từng hàm
+        function calculateDeterminants() {
+            const det1 = lambda * lambda; // |M1| = λ² (quay không thay đổi định thức)
+            const det2 = lambda * lambda; // |M2| = λ²
+            const det3 = lambda * lambda; // |M3| = λ²
+            const det4 = Math.pow(1 - lambda - lambda*lambda, 2); // |M4| = (1-λ-λ²)²
+            
+            return [det1, det2, det3, det4];
+        }
+
+        // Tính xác suất theo định thức
+        function calculateProbabilities(determinants) {
+            const total = determinants.reduce((sum, det) => sum + det, 0);
+            return determinants.map(det => det / total);
+        }
+
+        // Hiển thị giá trị lambda và xác suất
+        function updateDisplay() {
+            const fraction = toFraction(lambda);
+            lambdaValue.textContent = fraction ? `${fraction} ≈ ${lambda.toFixed(3)}` : lambda.toFixed(3);
+            
+            const determinants = calculateDeterminants();
+            const probabilities = calculateProbabilities(determinants);
+            
+            for (let i = 0; i < 4; i++) {
+                detElements[i].textContent = determinants[i].toFixed(3);
+                probElements[i].textContent = (probabilities[i] * 100).toFixed(1) + '%';
+            }
+        }
+
+        // Chuyển số thập phân về dạng phân số đơn giản
+        function toFraction(decimal) {
+            if (Math.abs(decimal - 1/3) < 0.001) return '1/3';
+            if (Math.abs(decimal - 0.5) < 0.001) return '1/2';
+            if (Math.abs(decimal - goldenRatio) < 0.001) return '(√5-1)/2';
+            return null;
+        }
+
+        // 4 hàm co theo định nghĩa từ ảnh
+        const functions = [
+            { 
+                fn: (x, y) => {
+                    const [rx, ry] = rotatePiOver2(x, y);
+                    return [lambda * rx + 1, lambda * ry]; 
+                }, 
+                color: colors[0], 
+                name: 'f₁ (quay π/2)' 
+            },
+            { 
+                fn: (x, y) => [lambda * x, lambda * y], 
+                color: colors[1], 
+                name: 'f₂ (co λ)' 
+            },
+            { 
+                fn: (x, y) => {
+                    const [rx, ry] = rotate3PiOver2(x, y);
+                    return [lambda * rx, lambda * ry];
+                }, 
+                color: colors[2], 
+                name: 'f₃ (quay 3π/2)' 
+            },
+            { 
+                fn: (x, y) => {
+                    const scale = 1 - lambda - lambda*lambda;
+                    const offset = (lambda + lambda*lambda) / 2;
+                    return [scale * x + offset, scale * y + offset];
+                }, 
+                color: colors[3], 
+                name: 'f₄ (co + dịch)' 
+            }
+        ];
+
+        // Tạo attractor với xác suất theo định thức
+        function generateAttractor() {
+            let x = 0.5;
+            let y = 0.5;
+            const traces = functions.map(f => ({
+                x: [],
+                y: [],
+                color: f.color,
+                name: f.name
+            }));
+            
+            const determinants = calculateDeterminants();
+            const probabilities = calculateProbabilities(determinants);
+            
+            // Tạo cumulative probabilities để chọn hàm
+            const cumProb = [];
+            let sum = 0;
+            for (let p of probabilities) {
+                sum += p;
+                cumProb.push(sum);
+            }
+            
+            for (let i = 0; i < maxPoints + burnIn; i++) {
+                const r = Math.random();
+                let index = 0;
+                
+                // Chọn hàm dựa trên xác suất tích lũy
+                for (let j = 0; j < cumProb.length; j++) {
+                    if (r <= cumProb[j]) {
+                        index = j;
+                        break;
+                    }
+                }
+                
+                const selectedFn = functions[index];
+                const [newX, newY] = selectedFn.fn(x, y);
+                
+                x = newX;
+                y = newY;
+                
+                if (i >= burnIn) {
+                    traces[index].x.push(x);
+                    traces[index].y.push(y);
+                }
+            }
+            
+            return traces;
+        }
+
+        // Cập nhật đồ thị
+        function updateAttractor() {
+            const tracesData = generateAttractor().map(trace => ({
+                x: trace.x,
+                y: trace.y,
+                mode: 'markers',
+                marker: {
+                    size: 3,
+                    color: trace.color,
+                    opacity: 0.7
+                },
+                name: trace.name + ` (${(trace.x.length/maxPoints*100).toFixed(1)}%)`,
+                type: 'scatter'
+            }));
+            
+            const layout = {
+                title: `Attractor 4 hàm với λ = ${toFraction(lambda) || lambda.toFixed(3)}`,
+                xaxis: { title: 'x', range: [-0.5, 1.5] },
+                yaxis: { title: 'y', range: [-0.5, 1.5] },
+                hovermode: 'closest',
+                showlegend: true,
+                legend: { orientation: 'h', y: -0.2 }
+            };
+            
+            Plotly.newPlot(graphDiv, tracesData, layout);
+        }
+
+        // Khởi tạo ban đầu
+        updateDisplay();
+        updateAttractor();
+    </script>
+</body>
+</html>
