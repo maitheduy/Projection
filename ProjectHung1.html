@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive IFS Fractal Explorer (Chaos Game)</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+        canvas {
+            border: 2px solid #333;
+            background-color: #000;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .controls {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            width: 500px;
+        }
+        .slider-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .slider-group label {
+            width: 80px;
+            font-weight: bold;
+        }
+        .slider-group input[type="range"] {
+            flex-grow: 1;
+            margin: 0 10px;
+        }
+        .slider-group span {
+            width: 50px;
+            text-align: right;
+            font-family: monospace;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            background-color: #e7e7e7;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Interactive IFS Fractal Explorer</h1>
+    <canvas id="fractalCanvas" width="500" height="500"></canvas>
+
+    <div class="controls">
+        <div class="slider-group">
+            <label for="lambdaSlider">&lambda; (lambda):</label>
+            <input type="range" id="lambdaSlider" min="0" max="1" value="0.5" step="0.001">
+            <span id="lambdaValue">0.500</span>
+        </div>
+        <div class="slider-group">
+            <label for="muSlider">&mu; (mu):</label>
+            <input type="range" id="muSlider" min="0" max="1" value="0.2" step="0.001">
+            <span id="muValue">0.200</span>
+        </div>
+        <div class="slider-group">
+            <label for="alphaSlider">&alpha; (alpha):</label>
+            <input type="range" id="alphaSlider" min="0" max="1" value="0.5" step="0.001">
+            <span id="alphaValue">0.500</span>
+        </div>
+        <button id="resetButton">Reset</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('fractalCanvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // Sliders and value displays
+        const lambdaSlider = document.getElementById('lambdaSlider');
+        const muSlider = document.getElementById('muSlider');
+        const alphaSlider = document.getElementById('alphaSlider');
+        const resetButton = document.getElementById('resetButton');
+
+        const lambdaValueSpan = document.getElementById('lambdaValue');
+        const muValueSpan = document.getElementById('muValue');
+        const alphaValueSpan = document.getElementById('alphaValue');
+
+        // Number of points to draw
+        const numPoints = 100000;
+
+        // Define the IFS functions
+        // f1(x,y) = [0 λ; λ 0](x,y) + [0;0] -> (λy, λx)
+        const f1 = (x, y, lambda, mu) => ({ x: lambda * y, y: lambda * x });
+
+        // f2(x,y) = [0 λ; -λ 0](x,y) + [0;1] -> (λy, -λx + 1)
+        const f2 = (x, y, lambda, mu) => ({ x: lambda * y, y: -lambda * x + 1 });
+
+        // f3(x,y) = [0 -λ; λ 0](x,y) + [1;0] -> (-λy + 1, λx)
+        const f3 = (x, y, lambda, mu) => ({ x: -lambda * y + 1, y: lambda * x });
+        
+        // f4(x,y) = [0 μ; μ 0](x,y) + [α;α] -> (μy + α, μx + α)
+        const f4 = (x, y, lambda, mu, alpha) => ({ x: mu * y + alpha, y: mu * x + alpha });
+
+        const functions = [f1, f2, f3, f4];
+        const colors = ['#ff6347', '#4682b4', '#32cd32', '#ffd700']; // Tomato, SteelBlue, LimeGreen, Gold
+
+        function drawFractal() {
+            // Get current slider values
+            const lambda = parseFloat(lambdaSlider.value);
+            const mu = parseFloat(muSlider.value);
+            const alpha = parseFloat(alphaSlider.value);
+
+            // Update display values
+            lambdaValueSpan.textContent = lambda.toFixed(3);
+            muValueSpan.textContent = mu.toFixed(3);
+            alphaValueSpan.textContent = alpha.toFixed(3);
+
+            // Clear the canvas
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, width, height);
+
+            // Chaos Game initialization
+            let x = Math.random();
+            let y = Math.random();
+
+            for (let i = 0; i < numPoints; i++) {
+                // Choose a random function
+                const choice = Math.floor(Math.random() * 4);
+                const chosenFunction = functions[choice];
+                const chosenColor = colors[choice];
+
+                // Apply the function
+                const newPoint = chosenFunction(x, y, lambda, mu, alpha);
+                x = newPoint.x;
+                y = newPoint.y;
+
+                // Draw the point (after first few iterations to let it settle)
+                if (i > 20) {
+                    // Map from logical coordinates (e.g., [0,1.5]) to canvas coordinates
+                    const canvasX = x * width / 1.5; // Adjust scaling for better view
+                    const canvasY = height - (y * height / 1.5); // Adjust scaling and flip y-axis
+
+                    ctx.fillStyle = chosenColor;
+                    ctx.fillRect(canvasX, canvasY, 1, 1);
+                }
+            }
+        }
+
+        // Event Listeners
+        lambdaSlider.addEventListener('input', drawFractal);
+        muSlider.addEventListener('input', drawFractal);
+        alphaSlider.addEventListener('input', drawFractal);
+        
+        resetButton.addEventListener('click', () => {
+            lambdaSlider.value = 0.5;
+            muSlider.value = 0.2;
+            alphaSlider.value = 0.5;
+            drawFractal();
+        });
+
+        // Initial draw
+        drawFractal();
+
+    </script>
+</body>
+</html>
