@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFS Attractor và Hình chiếu</title>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" id="MathJax-script" async></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+            gap: 20px;
+            box-sizing: border-box;
+        }
+        #formulas-container {
+            width: 280px;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-top: 88px; /* Căn cho đẹp */
+            flex-shrink: 0;
+        }
+        #formulas-container h2 {
+            text-align: center; color: #333; margin-top: 0;
+            border-bottom: 1px solid #eee; padding-bottom: 10px;
+        }
+        .formula { margin-top: 20px; font-size: 1.1em; text-align: center; }
+        
+        .main-container {
+            width: 100%;
+            /* THAY ĐỔI: Tăng chiều rộng để chứa 2 canvas */
+            max-width: 840px; 
+            display: flex; flex-direction: column; gap: 20px;
+        }
+        h1 { color: #333; text-align: center; margin: 0; }
+
+        #controls {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 10px 15px; align-items: center; padding: 15px;
+            background-color: white; border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            width: 100%; box-sizing: border-box; 
+        }
+        label { justify-self: end; font-weight: bold; color: #555; }
+        input[type="range"] { width: 100%; }
+        input[type="range"]:disabled { opacity: 0.5; }
+        span {
+            font-family: 'Courier New', Courier, monospace; font-weight: bold;
+            width: 60px; /* Cho đủ chỗ hiển thị độ */
+            text-align: left;
+        }
+
+        /* THAY ĐỔI: Layout cho 2 canvas */
+        #canvas-duo-container {
+            display: flex;
+            gap: 20px; /* Khoảng cách giữa 2 canvas */
+            justify-content: center;
+        }
+        .canvas-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        .canvas-wrapper h3 {
+            margin: 0;
+            font-weight: normal;
+            color: #444;
+        }
+        .canvas-item {
+            border: 2px solid #ccc;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        canvas { display: block; background-color: #000000; }
+    </style>
+</head>
+<body>
+
+    <div id="formulas-container">
+        <h2>Điều kiện ràng buộc</h2>
+        <div class="formula" id="mu-formula">$$ \mu = 1 - \lambda - \lambda^2 $$</div>
+        <div class="formula" id="alpha-condition">$$ \alpha \in [\min(\lambda, \lambda^2), \max(\lambda, \lambda^2)] $$</div>
+        <div class="formula" id="alpha-range-display">$$ \alpha \in [0.250, 0.500] $$</div>
+    </div>
+    
+    <div class="main-container">
+        <h1>Trình diễn Attractor và Hình chiếu</h1>
+        <div id="controls">
+            <label for="lambda-slider">λ (lambda):</label>
+            <input type="range" id="lambda-slider" min="0" max="1" step="0.001" value="0.5">
+            <span id="lambda-value">0.500</span>
+
+            <label for="mu-slider">μ (mu):</label>
+            <input type="range" id="mu-slider" min="-0.25" max="1" step="0.001" value="0.250" disabled>
+            <span id="mu-value">0.250</span>
+
+            <label for="alpha-slider">α (alpha):</label>
+            <input type="range" id="alpha-slider" min="0.25" max="0.5" step="0.001" value="0.375">
+            <span id="alpha-value">0.375</span>
+            
+            <!-- THÊM MỚI: Slider cho góc Beta -->
+            <label for="beta-slider">β (beta):</label>
+            <input type="range" id="beta-slider" min="0" max="6.283" step="0.01" value="0.785">
+            <span id="beta-value">45.0°</span>
+        </div>
+
+        <!-- THAY ĐỔI: Container cho 2 canvas -->
+        <div id="canvas-duo-container">
+            <div class="canvas-wrapper">
+                <h3>Attractor gốc</h3>
+                <div class="canvas-item">
+                    <canvas id="attractorCanvas" width="400" height="400"></canvas>
+                </div>
+            </div>
+            <div class="canvas-wrapper">
+                <h3>Hình chiếu</h3>
+                <div class="canvas-item">
+                    <canvas id="projectionCanvas" width="400" height="400"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // --- Lấy các phần tử DOM ---
+        const attractorCanvas = document.getElementById('attractorCanvas');
+        const projectionCanvas = document.getElementById('projectionCanvas');
+        const ctxAttractor = attractorCanvas.getContext('2d');
+        const ctxProjection = projectionCanvas.getContext('2d');
+
+        const lambdaSlider = document.getElementById('lambda-slider');
+        const muSlider = document.getElementById('mu-slider');
+        const alphaSlider = document.getElementById('alpha-slider');
+        const betaSlider = document.getElementById('beta-slider'); // Mới
+
+        const lambdaValueSpan = document.getElementById('lambda-value');
+        const muValueSpan = document.getElementById('mu-value');
+        const alphaValueSpan = document.getElementById('alpha-value');
+        const betaValueSpan = document.getElementById('beta-value'); // Mới
+        
+        const alphaRangeDisplay = document.getElementById('alpha-range-display');
+
+        // --- Các biến trạng thái ---
+        let x, y;
+        let lambda, mu, alpha, beta;
+        
+        let animationFrameId;
+        let cumulativeWeights = [];
+        let totalWeight = 0;
+        let viewPort = { minX: 0, range: 1 };
+        
+        const POINTS_PER_FRAME = 1500;
+        const PRE_CALCULATION_ITERATIONS = 30000;
+        const COLORS = ['#ff4d4d', '#4dff4d', '#4d4dff', '#ffa500'];
+
+        const functions = [
+            (px, py) => [lambda * px, lambda * py],
+            (px, py) => [lambda * px, -lambda * py + 1],
+            (px, py) => [-lambda * px + 1, lambda * py],
+            (px, py) => [mu * px + alpha, mu * py + alpha]
+        ];
+        
+        // --- Các hàm ánh xạ ---
+        function mapToCanvasX(mathX) { return ((mathX - viewPort.minX) / viewPort.range) * attractorCanvas.width; }
+        function mapToCanvasY(mathY) { return attractorCanvas.height - (((mathY - viewPort.minY) / viewPort.range) * attractorCanvas.height); }
+        
+        // Hàm ánh xạ một giá trị từ khoảng này sang khoảng khác
+        function mapValue(value, inMin, inMax, outMin, outMax) {
+            return (value - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+        }
+        
+        function chooseFunctionByWeight() {
+            const r = Math.random() * totalWeight;
+            if (r < cumulativeWeights[0]) return 0;
+            if (r < cumulativeWeights[1]) return 1;
+            if (r < cumulativeWeights[2]) return 2;
+            return 3;
+        }
+        
+        // --- HÀM VẼ CHÍNH (ĐÃ SỬA) ---
+        function draw() {
+            // Lấy các giá trị cos và sin để dùng trong vòng lặp
+            const cosBeta = Math.cos(beta);
+            const sinBeta = Math.sin(beta);
+            // Ước lượng khoảng giá trị của hình chiếu
+            const projectionRange = viewPort.range * 1.5; 
+
+            for (let i = 0; i < POINTS_PER_FRAME; i++) {
+                const funcIndex = (totalWeight > 0) ? chooseFunctionByWeight() : Math.floor(Math.random() * 4);
+                
+                [x, y] = functions[funcIndex](x, y);
+                
+                const color = COLORS[funcIndex];
+
+                // 1. Vẽ lên canvas bên trái (Attractor)
+                const canvasX = mapToCanvasX(x);
+                const canvasY = mapToCanvasY(y);
+                ctxAttractor.fillStyle = color;
+                ctxAttractor.fillRect(canvasX, canvasY, 1, 1);
+                
+                // 2. Vẽ lên canvas bên phải (Hình chiếu)
+                // Tính giá trị chiếu
+                const projectionDist = x * cosBeta + y * sinBeta;
+                
+                // Ánh xạ khoảng cách chiếu vào trục Y của canvas phải
+                const projectionY = mapValue(projectionDist, -projectionRange/2, projectionRange/2, projectionCanvas.height, 0);
+                
+                // Vẽ điểm với vị trí X ngẫu nhiên để tạo hiệu ứng dải
+                const projectionX = Math.random() * projectionCanvas.width;
+                
+                ctxProjection.fillStyle = color;
+                ctxProjection.fillRect(projectionX, projectionY, 1, 1);
+            }
+            
+            animationFrameId = requestAnimationFrame(draw);
+        }
+        
+        // --- HÀM RESTART (ĐÃ SỬA) ---
+        function restart() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            
+            lambda = parseFloat(lambdaSlider.value);
+            mu = parseFloat(muSlider.value);
+            alpha = parseFloat(alphaSlider.value);
+            beta = parseFloat(betaSlider.value); // Lấy giá trị beta
+            
+            const w1 = lambda * lambda, w2 = lambda * lambda, w3 = lambda * lambda, w4 = Math.abs(mu * mu);
+            totalWeight = w1 + w2 + w3 + w4;
+            if (totalWeight > 0) cumulativeWeights = [w1, w1 + w2, w1 + w2 + w3, totalWeight];
+            else cumulativeWeights = [];
+            
+            // --- Tính toán viewport (giữ nguyên, dựa trên attractor gốc) ---
+            let tempX = Math.random(), tempY = Math.random();
+            let bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+            for(let i=0; i<100; i++) {
+                const funcIndex = (totalWeight > 0) ? chooseFunctionByWeight() : Math.floor(Math.random() * 4);
+                [tempX, tempY] = functions[funcIndex](tempX, tempY);
+            }
+            for(let i=0; i < PRE_CALCULATION_ITERATIONS; i++) {
+                const funcIndex = (totalWeight > 0) ? chooseFunctionByWeight() : Math.floor(Math.random() * 4);
+                [tempX, tempY] = functions[funcIndex](tempX, tempY);
+                bounds.minX = Math.min(bounds.minX, tempX); bounds.maxX = Math.max(bounds.maxX, tempX);
+                bounds.minY = Math.min(bounds.minY, tempY); bounds.maxY = Math.max(bounds.maxY, tempY);
+            }
+            let mathWidth = bounds.maxX - bounds.minX; let mathHeight = bounds.maxY - bounds.minY;
+            if (mathWidth < 1e-9) mathWidth = 0.1; if (mathHeight < 1e-9) mathHeight = 0.1;
+            let mathRange = Math.max(mathWidth, mathHeight);
+            const padding = mathRange * 0.15;
+            mathRange += padding;
+            const centerX = (bounds.minX + bounds.maxX) / 2; const centerY = (bounds.minY + bounds.maxY) / 2;
+            viewPort = { minX: centerX - mathRange / 2, minY: centerY - mathRange / 2, range: mathRange };
+
+            // --- Bắt đầu vẽ (xóa cả 2 canvas) ---
+            ctxAttractor.clearRect(0, 0, attractorCanvas.width, attractorCanvas.height);
+            ctxProjection.clearRect(0, 0, projectionCanvas.width, projectionCanvas.height);
+            
+            x = Math.random(); y = Math.random();
+            for(let i=0; i<100; i++) { // Warm-up
+                const funcIndex = (totalWeight > 0) ? chooseFunctionByWeight() : Math.floor(Math.random() * 4);
+                [x, y] = functions[funcIndex](x, y);
+            }
+            draw();
+        }
+
+        // --- HÀM QUẢN LÝ THAM SỐ (ĐÃ SỬA) ---
+        function updateParametersAndRestart() {
+            // Lambda
+            const currentLambda = parseFloat(lambdaSlider.value);
+            lambdaValueSpan.textContent = currentLambda.toFixed(3);
+
+            // Mu
+            const calculatedMu = 1 - currentLambda - (currentLambda * currentLambda);
+            muSlider.value = calculatedMu;
+            muValueSpan.textContent = calculatedMu.toFixed(3);
+
+            // Alpha
+            const lambda2 = currentLambda * currentLambda;
+            const alphaMin = Math.min(currentLambda, lambda2);
+            const alphaMax = Math.max(currentLambda, lambda2);
+            alphaSlider.min = alphaMin; alphaSlider.max = alphaMax;
+            alphaSlider.value = Math.max(alphaMin, Math.min(parseFloat(alphaSlider.value), alphaMax));
+            alphaValueSpan.textContent = parseFloat(alphaSlider.value).toFixed(3);
+            
+            // Beta
+            const currentBeta = parseFloat(betaSlider.value);
+            betaValueSpan.textContent = (currentBeta * 180 / Math.PI).toFixed(1) + '°';
+            
+            // MathJax
+            alphaRangeDisplay.innerText = `$$ \\alpha \\in [${alphaMin.toFixed(3)}, ${alphaMax.toFixed(3)}] $$`;
+            if (window.MathJax && window.MathJax.typeset) {
+                MathJax.typesetPromise([alphaRangeDisplay]).catch(err => console.log(err));
+            }
+
+            restart();
+        }
+        
+        // --- Gắn các sự kiện ---
+        lambdaSlider.addEventListener('input', updateParametersAndRestart);
+        alphaSlider.addEventListener('input', updateParametersAndRestart);
+        betaSlider.addEventListener('input', updateParametersAndRestart);
+
+        // --- Khởi động lần đầu ---
+        updateParametersAndRestart();
+    </script>
+</body>
+</html>
