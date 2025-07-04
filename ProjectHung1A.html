@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFS Attractor - Vừa vặn màn hình</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center; /* Căn giữa theo chiều ngang */
+            align-items: center; /* Căn giữa theo chiều dọc nếu nội dung ít */
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        
+        /* THAY ĐỔI: Thêm một container chính để kiểm soát chiều rộng tổng thể */
+        .main-container {
+            width: 100%;
+            max-width: 600px; /* Chiều rộng tối đa là 600px, vừa vặn với canvas */
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin: 0;
+        }
+
+        #controls {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            gap: 10px;
+            align-items: center;
+            padding: 15px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            /* THAY ĐỔI: Bỏ chiều rộng cố định, để nó tự co giãn theo parent */
+            width: 100%;
+            box-sizing: border-box; /* Quan trọng khi dùng padding + width 100% */
+        }
+
+        label {
+            justify-self: end;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        span {
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+        }
+        #canvas-container {
+            border: 2px solid #ccc;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            /* THAY ĐỔI: Để container tự vừa với canvas bên trong */
+            align-self: center; 
+        }
+        canvas {
+            display: block;
+            background-color: #000000;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- THAY ĐỔI: Bọc tất cả nội dung vào trong main-container -->
+    <div class="main-container">
+        <h1>Trình diễn Attractor với IFS</h1>
+
+        <div id="controls">
+            <label for="lambda-slider">λ (lambda):</label>
+            <input type="range" id="lambda-slider" min="0" max="1" step="0.001" value="0.5">
+            <span id="lambda-value">0.500</span>
+
+            <label for="mu-slider">μ (mu):</label>
+            <input type="range" id="mu-slider" min="0" max="1" step="0.001" value="0.5">
+            <span id="mu-value">0.500</span>
+
+            <label for="alpha-slider">α (alpha):</label>
+            <input type="range" id="alpha-slider" min="0" max="1" step="0.001" value="0.5">
+            <span id="alpha-value">0.500</span>
+        </div>
+
+        <div id="canvas-container">
+            <!-- THAY ĐỔI: Thu nhỏ kích thước canvas -->
+            <canvas id="chaosCanvas" width="600" height="600"></canvas>
+        </div>
+    </div>
+
+
+    <script>
+        // --- KHÔNG CẦN THAY ĐỔI JAVASCRIPT ---
+
+        const canvas = document.getElementById('chaosCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const lambdaSlider = document.getElementById('lambda-slider');
+        const muSlider = document.getElementById('mu-slider');
+        const alphaSlider = document.getElementById('alpha-slider');
+
+        const lambdaValueSpan = document.getElementById('lambda-value');
+        const muValueSpan = document.getElementById('mu-value');
+        const alphaValueSpan = document.getElementById('alpha-value');
+        
+        let x, y;
+        let lambda, mu, alpha;
+        
+        let animationFrameId;
+        let cumulativeWeights = [];
+        let totalWeight = 0;
+
+        let viewPort = { minX: 0, range: 1 };
+        
+        const POINTS_PER_FRAME = 2000;
+        const PRE_CALCULATION_ITERATIONS = 50000;
+        const COLORS = ['#ff4d4d', '#4dff4d', '#4d4dff', '#ffa500'];
+
+        const functions = [
+            (px, py) => [lambda * px, lambda * py],
+            (px, py) => [lambda * px, -lambda * py + 1],
+            (px, py) => [-lambda * px + 1, lambda * py],
+            (px, py) => [mu * px + alpha, mu * py + alpha]
+        ];
+        
+        function mapToCanvasX(mathX) {
+            return ((mathX - viewPort.minX) / viewPort.range) * canvas.width;
+        }
+
+        function mapToCanvasY(mathY) {
+            return canvas.height - (((mathY - viewPort.minY) / viewPort.range) * canvas.height);
+        }
+
+        function chooseFunctionByWeight() {
+            const r = Math.random() * totalWeight;
+            if (r < cumulativeWeights[0]) return 0;
+            if (r < cumulativeWeights[1]) return 1;
+            if (r < cumulativeWeights[2]) return 2;
+            return 3;
+        }
+
+        function draw() {
+            for (let i = 0; i < POINTS_PER_FRAME; i++) {
+                const funcIndex = (totalWeight > 0) ? chooseFunctionByWeight() : Math.floor(Math.random() * 4);
+                
+                const [newX, newY] = functions[funcIndex](x, y);
+                x = newX;
+                y = newY;
+                
+                const canvasX = mapToCanvasX(x);
+                const canvasY = mapToCanvasY(y);
+                
+                ctx.fillStyle = COLORS[funcIndex];
+                ctx.fillRect(canvasX, canvasY, 1, 1);
+            }
+            
+            animationFrameId = requestAnimationFrame(draw);
+        }
+        
+        function restart() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            
+            lambda = parseFloat(lambdaSlider.value);
+            mu = parseFloat(muSlider.value);
+            alpha = parseFloat(alphaSlider.value);
+            
+            lambdaValueSpan.textContent = lambda.toFixed(3);
+            muValueSpan.textContent = mu.toFixed(3);
+            alphaValueSpan.textContent = alpha.toFixed(3);
+            
+            const w1 = lambda * lambda, w2 = lambda * lambda, w3 = lambda * lambda, w4 = mu * mu;
+            totalWeight = w1 + w2 + w3 + w4;
+            if (totalWeight > 0) {
+                cumulativeWeights = [w1, w1 + w2, w1 + w2 + w3, totalWeight];
+            } else {
+                cumulativeWeights = [];
+            }
+
+            let tempX = Math.random(), tempY = Math.random();
+            let bounds = {
+                minX: Infinity, maxX: -Infinity,
+                minY: Infinity, maxY: -Infinity
+            };
+
+            for(let i=0; i<100; i++) {
+                const funcIndex = (totalWeight > 0) ? chooseFunctionByWeight() : Math.floor(Math.random() * 4);
+                [tempX, tempY] = functions[funcIndex](tempX, tempY);
+            }
+            for(let i=0; i < PRE_CALCULATION_ITERATIONS; i++) {
+                const funcIndex = (totalWeight > 0) ? chooseFunctionByWeight() : Math.floor(Math.random() * 4);
+                [tempX, tempY] = functions[funcIndex](tempX, tempY);
+                
+                bounds.minX = Math.min(bounds.minX, tempX);
+                bounds.maxX = Math.max(bounds.maxX, tempX);
+                bounds.minY = Math.min(bounds.minY, tempY);
+                bounds.maxY = Math.max(bounds.maxY, tempY);
+            }
+
+            let mathWidth = bounds.maxX - bounds.minX;
+            let mathHeight = bounds.maxY - bounds.minY;
+
+            if (mathWidth < 1e-9) mathWidth = 0.1;
+            if (mathHeight < 1e-9) mathHeight = 0.1;
+
+            let mathRange = Math.max(mathWidth, mathHeight);
+            
+            const padding = mathRange * 0.1;
+            mathRange += padding;
+
+            const centerX = (bounds.minX + bounds.maxX) / 2;
+            const centerY = (bounds.minY + bounds.maxY) / 2;
+            
+            viewPort = {
+                minX: centerX - mathRange / 2,
+                minY: centerY - mathRange / 2,
+                range: mathRange
+            };
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            x = Math.random();
+            y = Math.random();
+
+            for(let i=0; i<100; i++) {
+                const funcIndex = (totalWeight > 0) ? chooseFunctionByWeight() : Math.floor(Math.random() * 4);
+                [x, y] = functions[funcIndex](x, y);
+            }
+            
+            draw();
+        }
+
+        lambdaSlider.addEventListener('input', restart);
+        muSlider.addEventListener('input', restart);
+        alphaSlider.addEventListener('input', restart);
+
+        restart();
+    </script>
+
+</body>
+</html>
