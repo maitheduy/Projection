@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFS Attractor - Ràng buộc tham số</title>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" id="MathJax-script" async></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+            gap: 30px;
+            box-sizing: border-box;
+        }
+        #formulas-container {
+            width: 300px;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-top: 50px;
+        }
+        #formulas-container h2 {
+            text-align: center;
+            color: #333;
+            margin-top: 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .formula {
+            margin-top: 20px;
+            font-size: 1.1em;
+            text-align: center;
+        }
+        .main-container {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin: 0;
+        }
+        #controls {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 10px 15px;
+            align-items: center;
+            padding: 15px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            width: 100%;
+            box-sizing: border-box; 
+        }
+        label {
+            justify-self: end;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        input[type="range"]:disabled {
+            opacity: 0.5;
+        }
+        span {
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            width: 50px;
+            text-align: left;
+        }
+        #canvas-container {
+            border: 2px solid #ccc;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            align-self: center; 
+        }
+        canvas {
+            display: block;
+            background-color: #000000;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="formulas-container">
+        <h2>Điều kiện ràng buộc</h2>
+        <div class="formula" id="mu-formula">
+            $$ \mu = 1 - \lambda - \lambda^2 $$
+        </div>
+        <div class="formula" id="alpha-condition">
+            $$ \alpha \in [\min(\lambda, \lambda^2), \max(\lambda, \lambda^2)] $$
+        </div>
+        <div class="formula" id="alpha-range-display">
+            $$ \alpha \in [0.250, 0.500] $$
+        </div>
+    </div>
+    
+    <div class="main-container">
+        <h1>Trình diễn Attractor với IFS</h1>
+        <div id="controls">
+            <label for="lambda-slider">λ (lambda):</label>
+            <input type="range" id="lambda-slider" min="0" max="1" step="0.001" value="0.5">
+            <span id="lambda-value">0.500</span>
+
+            <label for="mu-slider">μ (mu):</label>
+            <input type="range" id="mu-slider" min="-0.25" max="1" step="0.001" value="0.250" disabled>
+            <span id="mu-value">0.250</span>
+
+            <label for="alpha-slider">α (alpha):</label>
+            <input type="range" id="alpha-slider" min="0.25" max="0.5" step="0.001" value="0.375">
+            <span id="alpha-value">0.375</span>
+        </div>
+        <div id="canvas-container">
+            <canvas id="chaosCanvas" width="600" height="600"></canvas>
+        </div>
+    </div>
+
+
+    <script>
+        const canvas = document.getElementById('chaosCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const lambdaSlider = document.getElementById('lambda-slider');
+        const muSlider = document.getElementById('mu-slider');
+        const alphaSlider = document.getElementById('alpha-slider');
+
+        const lambdaValueSpan = document.getElementById('lambda-value');
+        const muValueSpan = document.getElementById('mu-value');
+        const alphaValueSpan = document.getElementById('alpha-value');
+        
+        const alphaRangeDisplay = document.getElementById('alpha-range-display');
+
+        let x, y;
+        let lambda, mu, alpha;
+        
+        let animationFrameId;
+        let cumulativeWeights = [];
+        let totalWeight = 0;
+        let viewPort = { minX: 0, range: 1 };
+        
+        const POINTS_PER_FRAME = 2000;
+        const PRE_CALCULATION_ITERATIONS = 50000;
+        const COLORS = ['#ff4d4d', '#4dff4d', '#4d4dff', '#ffa500'];
+
+        const functions = [
+            (px, py) => [lambda * px, lambda * py],
+            (px, py) => [lambda * px, -lambda * py + 1],
+            (px, py) => [-lambda * px + 1, lambda * py],
+            (px, py) => [mu * px + alpha, mu * py + alpha]
+        ];
+        
+        function mapToCanvasX(mathX) { return ((mathX - viewPort.minX) / viewPort.range) * canvas.width; }
+        function mapToCanvasY(mathY) { return canvas.height - (((mathY - viewPort.minY) / viewPort.range) * canvas.height); }
+        function chooseFunctionByWeight() {
+            const r = Math.random() * totalWeight;
+            if (r < cumulativeWeights[0]) return 0;
+            if (r < cumulativeWeights[1]) return 1;
+            if (r < cumulativeWeights[2]) return 2;
+            return 3;
+        }
+
+        // ==========================================================
+        // ===== HÀM VẼ ĐIỂM ĐÁNH DẤU VÀ ĐƯỜNG THẲNG (ĐƯỢC THÊM VÀO) ====
+        // ==========================================================
+        function drawAxesAndLabels() {
+            const labelColor = 'cyan';
+            const pointColor = 'cyan';
+            
+            ctx.font = '14px Arial';
+            ctx.lineWidth = 1;
+
+            const drawLabel = (text, mathX, mathY, offsetX = 5, offsetY = -5) => {
+                const canvasX = mapToCanvasX(mathX);
+                const canvasY = mapToCanvasY(mathY);
+                ctx.fillStyle = labelColor;
+                ctx.fillText(text, canvasX + offsetX, canvasY + offsetY);
+            };
+            
+            const drawPoint = (mathX, mathY, color = pointColor, radius = 3) => {
+                const canvasX = mapToCanvasX(mathX);
+                const canvasY = mapToCanvasY(mathY);
+                ctx.beginPath();
+                ctx.arc(canvasX, canvasY, radius, 0, 2 * Math.PI, false);
+                ctx.fillStyle = color;
+                ctx.fill();
+            };
+
+            const lambda2 = lambda * lambda;
+
+            // Tọa độ P1 và P2
+            const p1x = lambda2;
+            const p1y = 1 - lambda;
+            const p2x = lambda;
+            const p2y = 1 - lambda2;
+
+            // Vẽ điểm P1 và P2
+            drawPoint(p1x, p1y);
+            drawLabel(`P1(λ², 1-λ)`, p1x, p1y, 10, 0);
+
+            drawPoint(p2x, p2y);
+            drawLabel(`P2(λ, 1-λ²)`, p2x, p2y, 10, 0);
+
+            // Vẽ điểm Q
+            const qx = alpha;
+            const qy = alpha + mu;
+            drawPoint(qx, qy, 'yellow', 4); // Điểm Q màu vàng và to hơn
+            drawLabel(`Q(α, α+μ)`, qx, qy, -25, -15);
+            
+            // =====================================================================
+            // ===== ĐOẠN CODE MỚI: KẺ ĐƯỜNG THẲNG MÀU TÍM NỐI P1 VÀ P2 ==========
+            // =====================================================================
+            ctx.beginPath();
+            ctx.moveTo(mapToCanvasX(p1x), mapToCanvasY(p1y));
+            ctx.lineTo(mapToCanvasX(p2x), mapToCanvasY(p2y));
+            ctx.strokeStyle = '#9400D3'; // Màu tím đậm (DarkViolet)
+            ctx.lineWidth = 2; // Cho đường thẳng dày hơn một chút để dễ thấy
+            ctx.stroke();
+            // =====================================================================
+            // ===== KẾT THÚC ĐOẠN CODE MỚI ========================================
+            // =====================================================================
+        }
+        
+        function draw() {
+            for (let i = 0; i < POINTS_PER_FRAME; i++) {
+                const funcIndex = (totalWeight > 0) ? chooseFunctionByWeight() : Math.floor(Math.random() * 4);
+                const [newX, newY] = functions[funcIndex](x, y);
+                x = newX;
+                y = newY;
+                const canvasX = mapToCanvasX(x);
+                const canvasY = mapToCanvasY(y);
+                ctx.fillStyle = COLORS[funcIndex];
+                ctx.fillRect(canvasX, canvasY, 1, 1);
+            }
+            animationFrameId = requestAnimationFrame(draw);
+        }
+        
+        function restart() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            
+            lambda = parseFloat(lambdaSlider.value);
+            mu = parseFloat(muSlider.value);
+            alpha = parseFloat(alphaSlider.value);
+            
+            const w1 = lambda * lambda, w2 = lambda * lambda, w3 = lambda * lambda, w4 = Math.abs(mu * mu);
+            totalWeight = w1 + w2 + w3 + w4;
+            if (totalWeight > 0) {
+                cumulativeWeights = [w1, w1 + w2, w1 + w2 + w3, totalWeight];
+            } else {
+                cumulativeWeights = [];
+            }
+            
+            let tempX = Math.random(), tempY = Math.random();
+            let bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+            for(let i=0; i<100; i++) {
+                const funcIndex = (totalWeight > 0) ? chooseFunctionByWeight() : Math.floor(Math.random() * 4);
+                [tempX, tempY] = functions[funcIndex](tempX, tempY);
+            }
+            for(let i=0; i < PRE_CALCULATION_ITERATIONS; i++) {
+                const funcIndex = (totalWeight > 0) ? chooseFunctionByWeight() : Math.floor(Math.random() * 4);
+                [tempX, tempY] = functions[funcIndex](tempX, tempY);
+                bounds.minX = Math.min(bounds.minX, tempX);
+                bounds.maxX = Math.max(bounds.maxX, tempX);
+                bounds.minY = Math.min(bounds.minY, tempY);
+                bounds.maxY = Math.max(bounds.maxY, tempY);
+            }
+            let mathWidth = bounds.maxX - bounds.minX;
+            let mathHeight = bounds.maxY - bounds.minY;
+            if (mathWidth < 1e-9) mathWidth = 0.1;
+            if (mathHeight < 1e-9) mathHeight = 0.1;
+            let mathRange = Math.max(mathWidth, mathHeight);
+            const padding = mathRange * 0.15; // Tăng padding một chút
+            mathRange += padding;
+            const centerX = (bounds.minX + bounds.maxX) / 2;
+            const centerY = (bounds.minY + bounds.maxY) / 2;
+            viewPort = { minX: centerX - mathRange / 2, minY: centerY - mathRange / 2, range: mathRange };
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Kích hoạt lại hàm vẽ các yếu tố phụ trợ
+            drawAxesAndLabels();
+            
+            x = Math.random();
+            y = Math.random();
+            for(let i=0; i<100; i++) {
+                const funcIndex = (totalWeight > 0) ? chooseFunctionByWeight() : Math.floor(Math.random() * 4);
+                [x, y] = functions[funcIndex](x, y);
+            }
+            draw();
+        }
+
+        function updateParametersAndRestart() {
+            const currentLambda = parseFloat(lambdaSlider.value);
+            lambdaValueSpan.textContent = currentLambda.toFixed(3);
+
+            const calculatedMu = 1 - currentLambda - (currentLambda * currentLambda);
+            muSlider.value = calculatedMu;
+            muValueSpan.textContent = calculatedMu.toFixed(3);
+
+            const lambda2 = currentLambda * currentLambda;
+            const alphaMin = Math.min(currentLambda, lambda2);
+            const alphaMax = Math.max(currentLambda, lambda2);
+            
+            alphaSlider.min = alphaMin;
+            alphaSlider.max = alphaMax;
+
+            alphaSlider.value = Math.max(alphaMin, Math.min(parseFloat(alphaSlider.value), alphaMax));
+            alphaValueSpan.textContent = parseFloat(alphaSlider.value).toFixed(3);
+            
+            alphaRangeDisplay.innerText = `$$ \\alpha \\in [${alphaMin.toFixed(3)}, ${alphaMax.toFixed(3)}] $$`;
+            if (window.MathJax && window.MathJax.typeset) {
+                MathJax.typesetPromise([alphaRangeDisplay]).catch(err => console.log(err));
+            }
+
+            restart();
+        }
+        
+        lambdaSlider.addEventListener('input', updateParametersAndRestart);
+        alphaSlider.addEventListener('input', () => {
+            alphaValueSpan.textContent = parseFloat(alphaSlider.value).toFixed(3);
+            restart();
+        });
+
+        updateParametersAndRestart();
+    </script>
+</body>
+</html>
