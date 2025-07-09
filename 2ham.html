@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFS Attractor (Xác suất theo Định thức)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #main-content {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 30px;
+            width: 100%;
+        }
+        .panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            padding: 20px;
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .panel h2 {
+            margin: 0 0 10px 0;
+            color: #555;
+            font-size: 1.2em;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            width: 100%;
+            text-align: center;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 15px; 
+            align-items: center;
+            width: 100%;
+            max-width: 400px;
+        }
+        label {
+            justify-self: end;
+            font-weight: 500;
+            color: #444;
+            font-size: 1.1em;
+        }
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+        span {
+            font-family: 'SF Mono', 'Courier New', Courier, monospace;
+            font-weight: 600;
+            font-size: 1.1em;
+            width: 60px;
+            text-align: left;
+            background-color: #f0f0f0;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .canvas-container {
+            border: 2px solid #ddd;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        canvas {
+            display: block;
+            background-color: #000000;
+        }
+    </style>
+</head>
+<body>
+    
+    <h1>Trực quan hóa Attractor IFS (Xác suất theo Định thức)</h1>
+
+    <div id="main-content">
+        <!-- Panel bên trái: Attractor -->
+        <div class="panel" id="left-panel">
+            <h2>Attractor</h2>
+            <div class="controls">
+                <label for="alpha-slider">α (alpha):</label>
+                <input type="range" id="alpha-slider" min="0" max="0.5" step="0.001" value="0.4">
+                <span id="alpha-value">0.400</span>
+                
+                <label for="beta-slider">β (beta):</label>
+                <input type="range" id="beta-slider" min="0.5" max="1" step="0.001" value="0.6">
+                <span id="beta-value">0.600</span>
+            </div>
+            <div class="canvas-container">
+                <canvas id="attractorCanvas" width="500" height="500"></canvas>
+            </div>
+        </div>
+
+        <!-- Panel bên phải: Phép chiếu -->
+        <div class="panel" id="right-panel">
+            <h2>Hình chiếu Phân tán (Scatter Plot)</h2>
+            <div class="controls">
+                <label for="theta-slider">θ (theta):</label>
+                <input type="range" id="theta-slider" min="0" max="180" step="1" value="45">
+                <span id="theta-value">45°</span>
+            </div>
+            <div class="canvas-container">
+                <canvas id="projectionCanvas" width="500" height="500"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Canvas và Context ---
+        const attractorCanvas = document.getElementById('attractorCanvas');
+        const attractorCtx = attractorCanvas.getContext('2d');
+        const projectionCanvas = document.getElementById('projectionCanvas');
+        const projectionCtx = projectionCanvas.getContext('2d');
+
+        // --- Controls ---
+        const alphaSlider = document.getElementById('alpha-slider');
+        const alphaValueSpan = document.getElementById('alpha-value');
+        const betaSlider = document.getElementById('beta-slider');
+        const betaValueSpan = document.getElementById('beta-value');
+        const thetaSlider = document.getElementById('theta-slider');
+        const thetaValueSpan = document.getElementById('theta-value');
+
+        // --- Biến toàn cục ---
+        let x, y;
+        let alpha, beta, thetaRad;
+        let animationFrameId;
+        
+        // BIẾN MỚI cho xác suất
+        let weight1, totalWeight;
+
+        // --- Viewports ---
+        let attractorViewPort = { minX: 0, minY: 0, range: 1 };
+        let projectionViewPort = { min: 0, range: 1 };
+
+        // --- Hằng số ---
+        const POINTS_PER_FRAME = 2000;
+        const PRE_CALCULATION_ITERATIONS = 50000;
+        const COLORS = ['#00FF00', '#FF0000']; // Xanh lá, Đỏ
+
+        // --- Hàm IFS ---
+        const getFunctions = (alpha, beta) => [
+            (px, py) => [alpha * px + alpha * py, -alpha * px + alpha * py], 
+            (px, py) => [-beta * px + beta * py + 1, -beta * px - beta * py]
+        ];
+
+        // --- Hàm toán học ---
+        function projectPoint(x, y, thetaInRadians) {
+            const ux = Math.cos(thetaInRadians);
+            const uy = Math.sin(thetaInRadians);
+            return x * ux + y * uy;
+        }
+
+        // ==========================================================
+        // ===== HÀM MỚI: Chọn hàm co theo xác suất định thức =====
+        // ==========================================================
+        function chooseFunction() {
+            // Nếu tổng trọng số quá nhỏ, chọn ngẫu nhiên để tránh lỗi
+            if (totalWeight < 1e-9) { 
+                return Math.random() < 0.5 ? 0 : 1;
+            }
+            const r = Math.random() * totalWeight;
+            return (r < weight1) ? 0 : 1;
+        }
+
+        // --- Hàm vẽ ---
+        function draw() {
+            const currentFunctions = getFunctions(alpha, beta);
+            attractorCtx.globalAlpha = 0.5;
+            projectionCtx.globalAlpha = 0.5;
+
+            for (let i = 0; i < POINTS_PER_FRAME; i++) {
+                const funcIndex = chooseFunction(); // Sử dụng hàm chọn mới
+                const [newX, newY] = currentFunctions[funcIndex](x, y);
+                x = newX;
+                y = newY;
+                const color = COLORS[funcIndex];
+
+                // 1. Vẽ trên canvas Attractor
+                const attractorCanvasX = ((x - attractorViewPort.minX) / attractorViewPort.range) * attractorCanvas.width;
+                const attractorCanvasY = attractorCanvas.height - (((y - attractorViewPort.minY) / attractorViewPort.range) * attractorCanvas.height);
+                attractorCtx.fillStyle = color;
+                attractorCtx.fillRect(attractorCanvasX, attractorCanvasY, 1.25, 1.25);
+
+                // 2. Vẽ trên canvas Phép chiếu
+                const projDist = projectPoint(x, y, thetaRad);
+                const projCanvasX = ((projDist - projectionViewPort.min) / projectionViewPort.range) * projectionCanvas.width;
+                const verticalJitter = (Math.random() - 0.5) * 200;
+                const projCanvasY = projectionCanvas.height / 2 + verticalJitter;
+
+                projectionCtx.fillStyle = color;
+                projectionCtx.beginPath();
+                projectionCtx.arc(projCanvasX, projCanvasY, 1.25, 0, 2 * Math.PI);
+                projectionCtx.fill();
+            }
+            animationFrameId = requestAnimationFrame(draw);
+        }
+        
+        function restart() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            
+            alpha = parseFloat(alphaSlider.value);
+            beta = parseFloat(betaSlider.value);
+            const thetaDeg = parseFloat(thetaSlider.value);
+            thetaRad = thetaDeg * Math.PI / 180;
+
+            alphaValueSpan.textContent = alpha.toFixed(3);
+            betaValueSpan.textContent = beta.toFixed(3);
+            thetaValueSpan.textContent = `${thetaDeg}°`;
+
+            // ==========================================================
+            // ===== TÍNH TOÁN LẠI TRỌNG SỐ KHI THAM SỐ THAY ĐỔI =====
+            // ==========================================================
+            // det(M1) = 2 * alpha^2
+            // det(M2) = 2 * beta^2
+            // Sử dụng giá trị tuyệt đối của định thức làm trọng số
+            weight1 = 2 * alpha * alpha;
+            const weight2 = 2 * beta * beta;
+            totalWeight = weight1 + weight2;
+            // ==========================================================
+            
+            const currentFunctions = getFunctions(alpha, beta);
+            
+            let tempX = Math.random(), tempY = Math.random();
+            let attractorBounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+            let projectionBounds = { min: Infinity, max: -Infinity };
+
+            for(let i=0; i < 100; i++) {
+                const funcIndex = chooseFunction();
+                [tempX, tempY] = currentFunctions[funcIndex](tempX, tempY);
+            }
+
+            for(let i=0; i < PRE_CALCULATION_ITERATIONS; i++) {
+                const funcIndex = chooseFunction();
+                [tempX, tempY] = currentFunctions[funcIndex](tempX, tempY);
+                attractorBounds.minX = Math.min(attractorBounds.minX, tempX);
+                attractorBounds.maxX = Math.max(attractorBounds.maxX, tempX);
+                attractorBounds.minY = Math.min(attractorBounds.minY, tempY);
+                attractorBounds.maxY = Math.max(attractorBounds.maxY, tempY);
+                const projDist = projectPoint(tempX, tempY, thetaRad);
+                projectionBounds.min = Math.min(projectionBounds.min, projDist);
+                projectionBounds.max = Math.max(projectionBounds.max, projDist);
+            }
+
+            let mathWidth = attractorBounds.maxX - attractorBounds.minX;
+            let mathHeight = attractorBounds.maxY - attractorBounds.minY;
+            let mathRange = Math.max(mathWidth, mathHeight) * 1.1;
+            let centerX = (attractorBounds.minX + attractorBounds.maxX) / 2;
+            let centerY = (attractorBounds.minY + attractorBounds.maxY) / 2;
+            attractorViewPort = { minX: centerX - mathRange / 2, minY: centerY - mathRange / 2, range: mathRange };
+            
+            projectionViewPort.range = (projectionBounds.max - projectionBounds.min) * 1.1;
+            if (projectionViewPort.range < 1e-9) projectionViewPort.range = 0.1;
+            projectionViewPort.min = projectionBounds.min - (projectionViewPort.range - (projectionBounds.max - projectionBounds.min)) / 2;
+
+            attractorCtx.clearRect(0, 0, attractorCanvas.width, attractorCanvas.height);
+            projectionCtx.clearRect(0, 0, projectionCanvas.width, projectionCanvas.height);
+            
+            x = Math.random(); y = Math.random();
+            for(let i=0; i<100; i++) {
+                const funcIndex = chooseFunction();
+                [x, y] = currentFunctions[funcIndex](x, y);
+            }
+            
+            draw();
+        }
+        
+        // --- Gắn sự kiện cho cả 3 sliders ---
+        alphaSlider.addEventListener('input', restart);
+        betaSlider.addEventListener('input', restart);
+        thetaSlider.addEventListener('input', restart);
+
+        // --- Khởi động lần đầu ---
+        restart();
+    </script>
+</body>
+</html>
