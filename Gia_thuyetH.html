@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFS Attractor (Layout Nhỏ gọn)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            flex-direction: column; /* Xếp h1 trên main-content */
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #main-content {
+            display: flex;
+            flex-direction: row; /* THAY ĐỔI CHÍNH: Xếp các panel theo hàng ngang */
+            flex-wrap: nowrap;   /* Không cho xuống hàng */
+            justify-content: center;
+            align-items: flex-start; /* Canh các panel ở trên cùng */
+            gap: 20px; /* Giảm khoảng cách giữa các panel */
+            width: 100%;
+        }
+        .panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            padding: 20px;
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            width: auto; /* Để panel tự co giãn theo nội dung */
+        }
+        .panel h2 {
+            margin: 0 0 10px 0;
+            color: #555;
+            font-size: 1.2em;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            width: 100%;
+            text-align: center;
+        }
+        .controls-analysis {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 10px; 
+            align-items: center;
+            width: 100%;
+            max-width: 450px;
+        }
+        .multi-controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px 15px; /* Giảm khoảng cách */
+            width: 100%;
+            padding: 5px;
+        }
+        .control-group-with-input {
+             display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 5px;
+        }
+        label {
+            justify-self: end;
+            font-weight: 500;
+            color: #444;
+            font-size: 1em;
+        }
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+        .value-input {
+            font-family: 'SF Mono', 'Courier New', Courier, monospace;
+            font-weight: 600;
+            font-size: 0.95em;
+            width: 55px;
+            text-align: center;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 4px;
+        }
+        .canvas-container {
+            border: 2px solid #ddd;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        canvas {
+            display: block;
+            background-color: #000000;
+        }
+    </style>
+</head>
+<body>
+    
+    <h1>Trực quan hóa Attractor IFS (Phép quay & Tịnh tiến)</h1>
+
+    <div id="main-content">
+        <!-- Panel bên trái: Attractor -->
+        <div class="panel" id="left-panel">
+            <h2>Attractor Controls</h2>
+            <div class="multi-controls">
+                <!-- Hàng 1: Các góc quay -->
+                <div class="control-group-with-input">
+                    <label for="angle-alpha-slider">α:</label>
+                    <input type="range" id="angle-alpha-slider" min="0" max="360" step="1" value="45">
+                    <input type="number" id="angle-alpha-input" class="value-input" step="1">
+                </div>
+                <div class="control-group-with-input">
+                    <label for="angle-beta-slider">β:</label>
+                    <input type="range" id="angle-beta-slider" min="0" max="360" step="1" value="90">
+                    <input type="number" id="angle-beta-input" class="value-input" step="1">
+                </div>
+                <div class="control-group-with-input">
+                    <label for="angle-gamma-slider">γ:</label>
+                    <input type="range" id="angle-gamma-slider" min="0" max="360" step="1" value="135">
+                    <input type="number" id="angle-gamma-input" class="value-input" step="1">
+                </div>
+                <!-- Hàng 2: Các giá trị tịnh tiến -->
+                <div class="control-group-with-input">
+                    <label for="t1-slider">t1:</label>
+                    <input type="range" id="t1-slider" min="-5" max="5" step="0.01" value="0">
+                    <input type="number" id="t1-input" class="value-input" step="0.01">
+                </div>
+                <div class="control-group-with-input">
+                    <label for="t2-slider">t2:</label>
+                    <input type="range" id="t2-slider" min="-5" max="5" step="0.01" value="0.5">
+                    <input type="number" id="t2-input" class="value-input" step="0.01">
+                </div>
+                <div class="control-group-with-input">
+                    <label for="t3-slider">t3:</label>
+                    <input type="range" id="t3-slider" min="-5" max="5" step="0.01" value="1.0">
+                    <input type="number" id="t3-input" class="value-input" step="0.01">
+                </div>
+            </div>
+            <div class="canvas-container">
+                <canvas id="attractorCanvas" width="450" height="450"></canvas>
+            </div>
+        </div>
+
+        <!-- Panel bên phải: Phép chiếu -->
+        <div class="panel" id="right-panel">
+            <h2>Phân tích Phép chiếu</h2>
+            <div class="controls-analysis">
+                <label for="theta-slider">θ (Góc chiếu):</label>
+                <input type="range" id="theta-slider" min="0" max="180" step="1" value="45">
+                <input type="number" id="theta-input" class="value-input" step="1">
+                
+                <label for="slice-slider">Vị trí Lát cắt:</label>
+                <input type="range" id="slice-slider" min="-3" max="3" step="0.01" value="0.5">
+                <input type="number" id="slice-input" class="value-input" step="0.01">
+            </div>
+            <div class="canvas-container">
+                <canvas id="projectionCanvas" width="450" height="450"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const get = (id) => document.getElementById(id);
+
+        const attractorCanvas = get('attractorCanvas');
+        const attractorCtx = attractorCanvas.getContext('2d');
+        const projectionCanvas = get('projectionCanvas');
+        const projectionCtx = projectionCanvas.getContext('2d');
+
+        const controls = {
+            angleAlpha: { slider: get('angle-alpha-slider'), input: get('angle-alpha-input'), decimals: 0 },
+            angleBeta:  { slider: get('angle-beta-slider'),  input: get('angle-beta-input'),  decimals: 0 },
+            angleGamma: { slider: get('angle-gamma-slider'), input: get('angle-gamma-input'), decimals: 0 },
+            t1:         { slider: get('t1-slider'),         input: get('t1-input'),         decimals: 2 },
+            t2:         { slider: get('t2-slider'),         input: get('t2-input'),         decimals: 2 },
+            t3:         { slider: get('t3-slider'),         input: get('t3-input'),         decimals: 2 },
+            theta:      { slider: get('theta-slider'),      input: get('theta-input'),      decimals: 0 },
+            slice:      { slider: get('slice-slider'),      input: get('slice-input'),      decimals: 2 }
+        };
+
+        let x, y;
+        let params = {}; 
+        let animationFrameId;
+        
+        let attractorViewPort = { minX: 0, minY: 0, range: 1 };
+        let projectionViewPort = { min: 0, range: 1 };
+
+        const POINTS_PER_FRAME = 2000;
+        const PRE_CALCULATION_ITERATIONS = 50000;
+        const COLORS = ['#00FF00', '#FF0000', '#8A2BE2']; 
+
+        const getFunctions = (p) => {
+            const cosA = Math.cos(p.angleAlphaRad), sinA = Math.sin(p.angleAlphaRad);
+            const cosB = Math.cos(p.angleBetaRad),  sinB = Math.sin(p.angleBetaRad);
+            const cosG = Math.cos(p.angleGammaRad), sinG = Math.sin(p.angleGammaRad);
+            const scale = 1/3;
+            return [
+                (px, py) => [(px*cosA - py*sinA) * scale,       (px*sinA + py*cosA) * scale + p.t1],
+                (px, py) => [(px*cosB - py*sinB) * scale + 1,   (px*sinB + py*cosB) * scale + p.t2],
+                (px, py) => [(px*cosG - py*sinG) * scale + 2,   (px*sinG + py*cosG) * scale + p.t3]
+            ];
+        };
+
+        function projectPoint(x, y, thetaInRadians) {
+            return x * Math.cos(thetaInRadians) + y * Math.sin(thetaInRadians);
+        }
+        
+        function drawHelperLines(ctx, thetaInRadians, slicePosition, viewPort) {
+            ctx.save();
+            const lineLength = viewPort.range * 3;
+            ctx.strokeStyle = 'yellow'; ctx.lineWidth = 1; ctx.setLineDash([5, 10]); ctx.globalAlpha = 0.7;
+            let p1x_proj = lineLength * Math.cos(thetaInRadians);
+            let p1y_proj = lineLength * Math.sin(thetaInRadians);
+            let canvasX1 = ((p1x_proj - viewPort.minX) / viewPort.range) * ctx.canvas.width;
+            let canvasY1 = ctx.canvas.height - (((p1y_proj - viewPort.minY) / viewPort.range) * ctx.canvas.height);
+            let canvasX2 = ((-p1x_proj - viewPort.minX) / viewPort.range) * ctx.canvas.width;
+            let canvasY2 = ctx.canvas.height - (((-p1y_proj - viewPort.minY) / viewPort.range) * ctx.canvas.height);
+            ctx.beginPath(); ctx.moveTo(canvasX1, canvasY1); ctx.lineTo(canvasX2, canvasY2); ctx.stroke();
+            
+            ctx.strokeStyle = 'darkorange'; ctx.lineWidth = 2; ctx.setLineDash([]); ctx.globalAlpha = 0.8;
+            const dirX = -Math.sin(thetaInRadians);
+            const dirY = Math.cos(thetaInRadians);
+            const slicePointX = slicePosition * Math.cos(thetaInRadians);
+            const slicePointY = slicePosition * Math.sin(thetaInRadians);
+            const p1x_slice = slicePointX + lineLength * dirX;
+            const p1y_slice = slicePointY + lineLength * dirY;
+            const p2x_slice = slicePointX - lineLength * dirX;
+            const p2y_slice = slicePointY - lineLength * dirY;
+            canvasX1 = ((p1x_slice - viewPort.minX) / viewPort.range) * ctx.canvas.width;
+            canvasY1 = ctx.canvas.height - (((p1y_slice - viewPort.minY) / viewPort.range) * ctx.canvas.height);
+            canvasX2 = ((p2x_slice - viewPort.minX) / viewPort.range) * ctx.canvas.width;
+            canvasY2 = ctx.canvas.height - (((p2y_slice - viewPort.minY) / viewPort.range) * ctx.canvas.height);
+            ctx.beginPath(); ctx.moveTo(canvasX1, canvasY1); ctx.lineTo(canvasX2, canvasY2); ctx.stroke();
+            ctx.restore();
+        }
+
+        function draw() {
+            const currentFunctions = getFunctions(params);
+            attractorCtx.globalAlpha = 0.5;
+            projectionCtx.globalAlpha = 0.5;
+            for (let i = 0; i < POINTS_PER_FRAME; i++) {
+                const funcIndex = Math.floor(Math.random() * 3);
+                [x, y] = currentFunctions[funcIndex](x, y);
+                const color = COLORS[funcIndex];
+                const attractorCanvasX = ((x - attractorViewPort.minX) / attractorViewPort.range) * attractorCanvas.width;
+                const attractorCanvasY = attractorCanvas.height - (((y - attractorViewPort.minY) / attractorViewPort.range) * attractorCanvas.height);
+                attractorCtx.fillStyle = color;
+                attractorCtx.fillRect(attractorCanvasX, attractorCanvasY, 1.25, 1.25);
+                const projDist = projectPoint(x, y, params.thetaRad);
+                const projCanvasX = ((projDist - projectionViewPort.min) / projectionViewPort.range) * projectionCanvas.width;
+                const verticalJitter = (Math.random() - 0.5) * 150; // Giảm jitter cho canvas nhỏ hơn
+                const projCanvasY = projectionCanvas.height / 2 + verticalJitter;
+                projectionCtx.fillStyle = color;
+                projectionCtx.beginPath();
+                projectionCtx.arc(projCanvasX, projCanvasY, 1.25, 0, 2 * Math.PI);
+                projectionCtx.fill();
+            }
+            animationFrameId = requestAnimationFrame(draw);
+        }
+        
+        function restart() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            
+            params = {
+                angleAlphaRad: parseFloat(controls.angleAlpha.slider.value) * Math.PI / 180,
+                angleBetaRad:  parseFloat(controls.angleBeta.slider.value)  * Math.PI / 180,
+                angleGammaRad: parseFloat(controls.angleGamma.slider.value) * Math.PI / 180,
+                t1:         parseFloat(controls.t1.slider.value),
+                t2:         parseFloat(controls.t2.slider.value),
+                t3:         parseFloat(controls.t3.slider.value),
+                thetaRad:   parseFloat(controls.theta.slider.value) * Math.PI / 180,
+                slicePos:   parseFloat(controls.slice.slider.value),
+            };
+            
+            const currentFunctions = getFunctions(params);
+            
+            let tempX = 0, tempY = 0;
+            let attractorBounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+            let projectionBounds = { min: Infinity, max: -Infinity };
+
+            for(let i=0; i < 100; i++) {
+                const funcIndex = Math.floor(Math.random() * 3);
+                [tempX, tempY] = currentFunctions[funcIndex](tempX, tempY);
+            }
+
+            for(let i=0; i < PRE_CALCULATION_ITERATIONS; i++) {
+                const funcIndex = Math.floor(Math.random() * 3);
+                [tempX, tempY] = currentFunctions[funcIndex](tempX, tempY);
+                attractorBounds.minX = Math.min(attractorBounds.minX, tempX);
+                attractorBounds.maxX = Math.max(attractorBounds.maxX, tempX);
+                attractorBounds.minY = Math.min(attractorBounds.minY, tempY);
+                attractorBounds.maxY = Math.max(attractorBounds.maxY, tempY);
+                const projDist = projectPoint(tempX, tempY, params.thetaRad);
+                projectionBounds.min = Math.min(projectionBounds.min, projDist);
+                projectionBounds.max = Math.max(projectionBounds.max, projDist);
+            }
+
+            let mathWidth = attractorBounds.maxX - attractorBounds.minX;
+            let mathHeight = attractorBounds.maxY - attractorBounds.minY;
+            let mathRange = Math.max(mathWidth, mathHeight) * 1.1;
+            if (mathRange < 1) mathRange = 1;
+            let centerX = (attractorBounds.minX + attractorBounds.maxX) / 2;
+            let centerY = (attractorBounds.minY + attractorBounds.maxY) / 2;
+            attractorViewPort = { minX: centerX - mathRange / 2, minY: centerY - mathRange / 2, range: mathRange };
+            
+            projectionViewPort.range = (projectionBounds.max - projectionBounds.min) * 1.1;
+            if (projectionViewPort.range < 1e-9) projectionViewPort.range = 0.1;
+            projectionViewPort.min = projectionBounds.min - (projectionViewPort.range - (projectionBounds.max - projectionBounds.min)) / 2;
+
+            attractorCtx.clearRect(0, 0, attractorCanvas.width, attractorCanvas.height);
+            projectionCtx.clearRect(0, 0, projectionCanvas.width, projectionCanvas.height);
+            
+            drawHelperLines(attractorCtx, params.thetaRad, params.slicePos, attractorViewPort);
+            
+            x = 0; y = 0;
+            for(let i=0; i<100; i++) {
+                const funcIndex = Math.floor(Math.random() * 3);
+                [x, y] = currentFunctions[funcIndex](x, y);
+            }
+            
+            draw();
+        }
+        
+        function linkSliderAndInput(control) {
+            const { slider, input, decimals } = control;
+            const updateInput = () => input.value = parseFloat(slider.value).toFixed(decimals);
+            const updateSlider = () => {
+                let val = parseFloat(input.value);
+                if (isNaN(val)) {
+                    updateInput();
+                    return;
+                }
+                val = Math.max(parseFloat(slider.min), Math.min(val, parseFloat(slider.max)));
+                slider.value = val;
+                input.value = val.toFixed(decimals);
+                restart();
+            };
+            slider.addEventListener('input', () => { updateInput(); restart(); });
+            input.addEventListener('change', updateSlider);
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { updateSlider(); input.blur(); } });
+            updateInput();
+        }
+        
+        for (const key in controls) {
+            linkSliderAndInput(controls[key]);
+        }
+
+        restart();
+    </script>
+</body>
+</html>
