@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trình khám phá Fractal Ammann Tiling với Hệ số co λ</title>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" id="MathJax-script" async></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        #main-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 30px;
+            width: 100%;
+            max-width: 1200px;
+        }
+        .panel {
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            padding: 25px;
+        }
+        #left-panel {
+            flex: 2;
+            min-width: 620px;
+            text-align: center;
+        }
+        #right-panel {
+            flex: 1;
+            min-width: 400px;
+        }
+        #right-panel h2 {
+            margin-top: 0;
+            text-align: center;
+            color: #444;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .function-display {
+            background-color: #fafafa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            font-size: 1.25em;
+            line-height: 1.8;
+            text-align: center;
+            min-height: 120px;
+        }
+        canvas {
+            border: 2px solid #ccc;
+            background-color: #000;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.15);
+            border-radius: 8px;
+            display: block;
+            margin: 0 auto;
+        }
+        .controls {
+            margin-top: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .slider-group {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 15px;
+        }
+        .slider-group label {
+            font-weight: 600;
+            font-size: 1.2em;
+            color: #333;
+        }
+        .slider-group input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+        .slider-group span {
+            font-family: 'SF Mono', 'Courier New', Courier, monospace;
+            font-weight: 500;
+            width: 60px;
+            background-color: #eef1f5;
+            padding: 5px 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        #hausdorffDisplay {
+            margin-top: 10px;
+            padding: 12px;
+            background-color: #e9f5ff;
+            border: 1px solid #b3d7f3;
+            border-radius: 8px;
+            font-size: 1.1em;
+        }
+         .explanation {
+            margin-top: 20px; 
+            font-size: 0.9em; 
+            color: #666; 
+            max-width: 600px;
+            text-align: left;
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+         }
+    </style>
+</head>
+<body>
+
+    <h1>Attractor của Ammann Tiling với Hệ số co λ</h1>
+    
+    <div id="main-container">
+        <div class="panel" id="left-panel">
+            <canvas id="fractalCanvas" width="600" height="600"></canvas>
+            <div class="controls">
+                <!-- *** SLIDER MỚI CHO LAMBDA *** -->
+                <div class="slider-group">
+                    <label for="lambdaSlider">λ:</label>
+                    <input type="range" id="lambdaSlider" min="0.1" max="1.1" value="1.0" step="0.001">
+                    <span id="lambdaValue">1.000</span>
+                </div>
+                 <div class="slider-group">
+                    <label for="kSlider">k:</label>
+                    <input type="range" id="kSlider" min="0" max="1" value="0.8" step="0.001">
+                    <span id="kValue">0.800</span>
+                </div>
+                <div id="hausdorffDisplay">
+                    <strong>Số chiều Hausdorff (D): </strong>
+                    <span id="hausdorffValue">Calculating...</span>
+                </div>
+            </div>
+             <div class="explanation">
+                <p><strong>Giải thích:</strong> Giờ đây, mỗi hàm co đều được nhân với một hệ số `λ`. Số chiều Hausdorff `D` được tính bằng cách giải phương trình: <strong>(λ√k)<sup>D</sup> + (λ√(1-k))<sup>D</sup> = 1</strong>. Khi `λ` thay đổi, nó sẽ co giãn toàn bộ attractor, ảnh hưởng trực tiếp đến độ phức tạp và số chiều của hình ảnh.</p>
+            </div>
+        </div>
+
+        <div class="panel" id="right-panel">
+            <h2>Hệ hàm lặp (IFS)</h2>
+            <div id="function1" class="function-display"></div>
+            <div id="function2" class="function-display"></div>
+        </div>
+    </div>
+
+
+    <script>
+        const canvas = document.getElementById('fractalCanvas');
+        const ctx = canvas.getContext('2d');
+        const kSlider = document.getElementById('kSlider');
+        const kValueSpan = document.getElementById('kValue');
+        
+        // *** THÊM VÀO: Lấy tham chiếu slider lambda ***
+        const lambdaSlider = document.getElementById('lambdaSlider');
+        const lambdaValueSpan = document.getElementById('lambdaValue');
+
+        const hausdorffValueSpan = document.getElementById('hausdorffValue');
+        const function1Div = document.getElementById('function1');
+        const function2Div = document.getElementById('function2');
+
+        const N_POINTS = 100000;
+        const COLORS = ['#e74c3c', '#3498db']; 
+
+        // *** THAY ĐỔI: Hàm co nhân với lambda ***
+        function f1(point, k, lambda) {
+            const [x, y] = point;
+            return [lambda * (k * y), lambda * x];
+        }
+
+        function f2(point, k, lambda) {
+            const [x, y] = point;
+            return [
+                lambda * ((k - 1) * y + (1 - k)), 
+                lambda * (-x + 1)
+            ];
+        }
+        
+        // *** THAY ĐỔI: Cập nhật hiển thị công thức ***
+        function updateFunctionDisplay(k, lambda) {
+            const k_val = k.toFixed(3);
+            const k_minus_1 = (k - 1).toFixed(3);
+            const one_minus_k = (1 - k).toFixed(3);
+            const lambda_val = lambda.toFixed(3);
+            
+            const func1_latex = `\\[f_1 \\begin{pmatrix} x \\\\ y \\end{pmatrix} = ${lambda_val}
+                                 \\begin{pmatrix} 0 & ${k_val} \\\\ 1 & 0 \\end{pmatrix} 
+                                 \\begin{pmatrix} x \\\\ y \\end{pmatrix}\\]`;
+                                 
+            const func2_latex = `\\[f_2 \\begin{pmatrix} x \\\\ y \\end{pmatrix} = ${lambda_val}
+                                 \\left( \\begin{pmatrix} 0 & ${k_minus_1} \\\\ -1 & 0 \\end{pmatrix} 
+                                 \\begin{pmatrix} x \\\\ y \\end{pmatrix} + 
+                                 \\begin{pmatrix} ${one_minus_k} \\\\ 1 \\end{pmatrix} \\right) \\]`;
+
+            function1Div.innerHTML = func1_latex;
+            function2Div.innerHTML = func2_latex;
+            
+            if (window.MathJax) {
+                 MathJax.typesetPromise([function1Div, function2Div]).catch(err => console.log(err.message));
+            }
+        }
+        
+        // *** THAY ĐỔI: Cập nhật tính số chiều Hausdorff ***
+        function solveHausdorffDimension(k, lambda) {
+            const r1 = lambda * Math.sqrt(k);
+            const r2 = lambda * Math.sqrt(1 - k);
+            
+            // Nếu hệ thống không co, lý thuyết không áp dụng
+            if (r1 >= 1 || r2 >= 1) return "Không hội tụ";
+            
+            const moranEquation = (D) => Math.pow(r1, D) + Math.pow(r2, D) - 1;
+
+            let low = 0.0, high = 2.0, mid = 0.0;
+            const tolerance = 1e-9;
+            for (let i = 0; i < 100; i++) {
+                mid = (low + high) / 2;
+                if (high - low < tolerance) return mid;
+                if (moranEquation(low) * moranEquation(mid) < 0) {
+                    high = mid;
+                } else {
+                    low = mid;
+                }
+            }
+            return mid;
+        }
+
+
+        function drawFractal() {
+            const k = parseFloat(kSlider.value);
+            const lambda = parseFloat(lambdaSlider.value); // Lấy giá trị lambda
+            kValueSpan.textContent = k.toFixed(3);
+            lambdaValueSpan.textContent = lambda.toFixed(3); // Cập nhật hiển thị lambda
+            
+            const dimension = solveHausdorffDimension(k, lambda);
+            hausdorffValueSpan.textContent = typeof dimension === 'number' ? dimension.toFixed(5) : dimension;
+            
+            updateFunctionDisplay(k, lambda);
+            
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            let point = [Math.random(), Math.random()];
+            
+            // Tìm ranh giới
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            let tempPoint = [...point];
+            for (let i = 0; i < 20000; i++) {
+                 const choice = Math.random() < k ? 0 : 1;
+                 tempPoint = choice === 0 ? f1(tempPoint, k, lambda) : f2(tempPoint, k, lambda);
+                 if (i > 100) { 
+                    minX = Math.min(minX, tempPoint[0]);
+                    maxX = Math.max(maxX, tempPoint[0]);
+                    minY = Math.min(minY, tempPoint[1]);
+                    maxY = Math.max(maxY, tempPoint[1]);
+                 }
+            }
+
+            const rangeX = maxX - minX;
+            const rangeY = maxY - minY;
+            const scale = Math.min(canvas.width / rangeX, canvas.height / rangeY) * 0.9;
+            const offsetX = (canvas.width - rangeX * scale) / 2 - minX * scale;
+            const offsetY = (canvas.height - rangeY * scale) / 2 + maxY * scale;
+
+            for (let i = 0; i < N_POINTS; i++) {
+                const choice = Math.random() < k ? 0 : 1;
+                point = choice === 0 ? f1(point, k, lambda) : f2(point, k, lambda);
+                
+                if (i > 100) {
+                    const canvasX = point[0] * scale + offsetX;
+                    const canvasY = -point[1] * scale + offsetY;
+                    ctx.fillStyle = COLORS[choice];
+                    ctx.fillRect(canvasX, canvasY, 1, 1);
+                }
+            }
+        }
+        
+        // *** THÊM VÀO: Gắn sự kiện cho slider mới ***
+        kSlider.addEventListener('input', drawFractal);
+        lambdaSlider.addEventListener('input', drawFractal);
+
+        // Khởi động
+        drawFractal();
+    </script>
+
+</body>
+</html>
