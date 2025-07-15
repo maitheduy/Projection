@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFS Attractor và Phân bố Hình chiếu</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        
+        .main-container {
+            width: 100%;
+            max-width: 1100px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        h1 {
+            color: #333; text-align: center; margin: 0;
+        }
+        h2 {
+            font-size: 1em;
+            text-align: center;
+            color: #444;
+            margin: 5px 0 10px 0;
+            font-weight: normal;
+        }
+
+        #controls {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 10px 20px;
+            align-items: center;
+            padding: 15px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            width: 100%;
+            box-sizing: border-box; 
+        }
+
+        label {
+            justify-self: end; font-weight: bold; color: #555;
+        }
+        input[type="range"] {
+            width: 100%;
+            margin: 0;
+        }
+        span {
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            min-width: 60px;
+        }
+        
+        #function-display-container {
+            background: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px 25px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.95em;
+        }
+
+        #function-display-container p {
+            margin: 0;
+            padding: 4px;
+            border-radius: 4px;
+            /* *** SỬA ĐỔI: Gỡ bỏ white-space: nowrap để cho phép xuống dòng *** */
+        }
+        
+        .canvas-super-container {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+        
+        .canvas-wrapper {
+            border: 2px solid #ccc;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            background-color: #000;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <h1>Attractor IFS và Phân bố Hình chiếu</h1>
+
+        <div id="controls">
+            <label for="lambda-slider">λ (lambda):</label>
+            <input type="range" id="lambda-slider" min="0" max="0.618" step="0.001" value="0.5">
+            <span id="lambda-value">0.500</span>
+
+            <label for="theta-slider">θ (theta):</label>
+            <input type="range" id="theta-slider" min="0" max="180" step="1" value="0">
+            <span id="theta-value">0 độ</span>
+            
+            <label style="grid-column: 1;">μ (tính toán):</label>
+            <span></span>
+            <span id="mu-value" style="grid-column: 3;">...</span>
+
+            <label style="grid-column: 1;">α (tính toán):</label>
+            <span></span>
+            <span id="alpha-value" style="grid-column: 3;">...</span>
+            
+            <label style="grid-column: 1; color: #0056b3;">Số chiều Hausdorff:</label>
+            <span></span>
+            <span id="hausdorff-dim-value" style="grid-column: 3; color: #0056b3;">...</span>
+        </div>
+        
+        <div id="function-display-container">
+            <p id="f1-display"></p>
+            <p id="f2-display"></p>
+            <p id="f3-display"></p>
+            <p id="f4-display"></p>
+        </div>
+
+        <div class="canvas-super-container">
+            <div class="canvas-wrapper">
+                <h2>Attractor IFS</h2>
+                <canvas id="chaosCanvas" width="500" height="500"></canvas>
+            </div>
+            <div class="canvas-wrapper">
+                <h2>Phân bố Điểm Chiếu (Histogram)</h2>
+                <canvas id="projectionCanvas" width="500" height="500"></canvas>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        const canvas = document.getElementById('chaosCanvas');
+        const ctx = canvas.getContext('2d');
+        const projectionCanvas = document.getElementById('projectionCanvas');
+        const ctxProj = projectionCanvas.getContext('2d');
+
+        const lambdaSlider = document.getElementById('lambda-slider');
+        const lambdaValueSpan = document.getElementById('lambda-value');
+        const thetaSlider = document.getElementById('theta-slider');
+        const thetaValueSpan = document.getElementById('theta-value');
+        
+        const muValueSpan = document.getElementById('mu-value');
+        const alphaValueSpan = document.getElementById('alpha-value');
+        const hausdorffDimSpan = document.getElementById('hausdorff-dim-value');
+
+        const f1Display = document.getElementById('f1-display');
+        const f2Display = document.getElementById('f2-display');
+        const f3Display = document.getElementById('f3-display');
+        const f4Display = document.getElementById('f4-display');
+        
+        let x, y;
+        let lambda, mu, alpha, thetaRad;
+        let animationFrameId;
+        
+        let viewPort = { minX: 0, rangeX: 1, minY: 0, rangeY: 1 };
+        let projectionBounds = { min: 0, range: 1 };
+        
+        let cumulativeWeights = [];
+        let totalWeight = 0;
+
+        const POINTS_PER_FRAME = 2000;
+        const PRE_CALCULATION_ITERATIONS = 50000;
+        const PROJECTION_ITERATIONS = 200000;
+        const NUM_PROJECTION_BINS = 500;
+        let projectionBins = [];
+
+        const COLORS = ['#ff4d4d', '#4dff4d', '#4d4dff', '#ffa500'];
+
+        const functions = [
+            (px, py) => [lambda * px, lambda * py],
+            (px, py) => [lambda * px, -lambda * py + 1],
+            (px, py) => [-lambda * px + 1, lambda * py],
+            (px, py) => [mu * px + alpha, mu * py + alpha]
+        ];
+
+        function chooseFunctionByWeight() {
+            if (totalWeight <= 0) return Math.floor(Math.random() * 4);
+            const r = Math.random() * totalWeight;
+            if (r < cumulativeWeights[0]) return 0;
+            if (r < cumulativeWeights[1]) return 1;
+            if (r < cumulativeWeights[2]) return 2;
+            return 3;
+        }
+
+        function initializeProjectionBins() {
+            projectionBins = [];
+            for (let i = 0; i < NUM_PROJECTION_BINS; i++) {
+                projectionBins.push({ counts: [0, 0, 0, 0] });
+            }
+        }
+        
+        function mapToCanvasX(mathX) { return ((mathX - viewPort.minX) / viewPort.rangeX) * canvas.width; }
+        function mapToCanvasY(mathY) { return canvas.height - (((mathY - viewPort.minY) / viewPort.rangeY) * canvas.height); }
+
+        function calculateHausdorffDimension(lambda, mu) {
+            if (lambda <= 0 || mu < 0) return 0;
+            if (mu === 0) return -Math.log(3) / Math.log(lambda);
+            const moranEquation = (s) => 3 * Math.pow(lambda, s) + Math.pow(mu, s) - 1;
+            let s_low = 0, s_high = 3;
+            for (let i = 0; i < 100; i++) {
+                let s_mid = (s_low + s_high) / 2;
+                if (moranEquation(s_mid) > 0) s_low = s_mid;
+                else s_high = s_mid;
+            }
+            return (s_low + s_high) / 2;
+        }
+        
+        // *** SỬA ĐỔI: Hàm để đặt hiển thị công thức tĩnh ***
+        function setStaticFunctionDisplays() {
+            // Sử dụng innerHTML để hiển thị các ký tự đặc biệt (&lambda;, &mu;, &alpha;, <sup>)
+            f1Display.innerHTML = `f₁(x,y) = [&lambda;x, &lambda;y]`;
+            f1Display.style.color = COLORS[0];
+
+            f2Display.innerHTML = `f₂(x,y) = [&lambda;x, -&lambda;y + 1]`;
+            f2Display.style.color = COLORS[1];
+
+            f3Display.innerHTML = `f₃(x,y) = [-&lambda;x + 1, &lambda;y]`;
+            f3Display.style.color = COLORS[2];
+
+            f4Display.innerHTML = `f₄(x,y) = [&mu;x + &alpha;, &mu;y + &alpha;], với &mu;=1-&lambda;-&lambda;<sup>2</sup>, &alpha;=(&lambda;<sup>2</sup>+&lambda;)/2`;
+            f4Display.style.color = COLORS[3];
+        }
+
+        function draw() {
+            for (let i = 0; i < POINTS_PER_FRAME; i++) {
+                const funcIndex = chooseFunctionByWeight();
+                const [newX, newY] = functions[funcIndex](x, y);
+                x = newX; y = newY;
+                
+                ctx.fillStyle = COLORS[funcIndex];
+                ctx.fillRect(mapToCanvasX(x), mapToCanvasY(y), 1, 1);
+            }
+            animationFrameId = requestAnimationFrame(draw);
+        }
+
+        function calculateAndDrawProjection() {
+            initializeProjectionBins();
+            let tempX = Math.random(), tempY = Math.random();
+            const cosTheta = Math.cos(thetaRad), sinTheta = Math.sin(thetaRad);
+
+            for (let i = 0; i < PROJECTION_ITERATIONS; i++) {
+                const funcIndex = chooseFunctionByWeight();
+                [tempX, tempY] = functions[funcIndex](tempX, tempY);
+                
+                if (i < 100) continue;
+                const projectedValue = tempX * cosTheta + tempY * sinTheta;
+                const binIndex = Math.floor(((projectedValue - projectionBounds.min) / projectionBounds.range) * NUM_PROJECTION_BINS);
+
+                if (binIndex >= 0 && binIndex < NUM_PROJECTION_BINS) {
+                    projectionBins[binIndex].counts[funcIndex]++;
+                }
+            }
+            
+            let maxOverallCount = 0;
+            for (const bin of projectionBins) {
+                const totalCountInBin = bin.counts.reduce((sum, current) => sum + current, 0);
+                if (totalCountInBin > maxOverallCount) {
+                    maxOverallCount = totalCountInBin;
+                }
+            }
+
+            ctxProj.clearRect(0, 0, projectionCanvas.width, projectionCanvas.height);
+            if (maxOverallCount === 0) return;
+
+            const barWidth = projectionCanvas.width / NUM_PROJECTION_BINS;
+
+            for (let i = 0; i < NUM_PROJECTION_BINS; i++) {
+                let currentY = projectionCanvas.height;
+                for (let j = 0; j < 4; j++) {
+                    const colorCount = projectionBins[i].counts[j];
+                    if (colorCount === 0) continue;
+                    const segmentHeight = (colorCount / maxOverallCount) * projectionCanvas.height;
+                    ctxProj.fillStyle = COLORS[j];
+                    ctxProj.fillRect(i * barWidth, currentY - segmentHeight, barWidth, segmentHeight);
+                    currentY -= segmentHeight;
+                }
+            }
+        }
+        
+        function restart() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            
+            lambda = parseFloat(lambdaSlider.value);
+            const thetaDeg = parseFloat(thetaSlider.value);
+            thetaRad = thetaDeg * Math.PI / 180;
+
+            alpha = (lambda * lambda + lambda) / 2.0;
+            mu = 1 - lambda - (lambda * lambda);
+            if (mu < 0) mu = 0;
+
+            lambdaValueSpan.textContent = lambda.toFixed(3);
+            thetaValueSpan.textContent = `${thetaDeg.toFixed(0)} độ`;
+            muValueSpan.textContent = mu.toFixed(3);
+            alphaValueSpan.textContent = alpha.toFixed(3);
+            const hausdorffDim = calculateHausdorffDimension(lambda, mu);
+            hausdorffDimSpan.textContent = hausdorffDim.toFixed(5);
+            
+            const w1 = lambda * lambda, w2 = lambda * lambda, w3 = lambda * lambda, w4 = mu * mu;
+            totalWeight = w1 + w2 + w3 + w4;
+            if (totalWeight > 0) {
+                cumulativeWeights = [w1, w1 + w2, w1 + w2 + w3, totalWeight];
+            } else {
+                cumulativeWeights = [];
+            }
+            
+            let tempX = Math.random(), tempY = Math.random();
+            let bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+            let projMin = Infinity, projMax = -Infinity;
+            const cosTheta = Math.cos(thetaRad), sinTheta = Math.sin(thetaRad);
+
+            for(let i=0; i < 100; i++) { [tempX, tempY] = functions[chooseFunctionByWeight()](tempX, tempY); }
+            for(let i=0; i < PRE_CALCULATION_ITERATIONS; i++) {
+                [tempX, tempY] = functions[chooseFunctionByWeight()](tempX, tempY);
+                bounds.minX = Math.min(bounds.minX, tempX); bounds.maxX = Math.max(bounds.maxX, tempX);
+                bounds.minY = Math.min(bounds.minY, tempY); bounds.maxY = Math.max(bounds.maxY, tempY);
+                const projectedValue = tempX * cosTheta + tempY * sinTheta;
+                projMin = Math.min(projMin, projectedValue); projMax = Math.max(projMax, projectedValue);
+            }
+
+            const mathWidth = bounds.maxX - bounds.minX;
+            const mathHeight = bounds.maxY - bounds.minY;
+            let mathRange = Math.max(mathWidth, mathHeight) * 1.1; 
+            if (mathRange < 1e-9) mathRange = 1; 
+            const centerX = (bounds.minX + bounds.maxX) / 2;
+            const centerY = (bounds.minY + bounds.maxY) / 2;
+            viewPort = { minX: centerX - mathRange / 2, minY: centerY - mathRange / 2, rangeX: mathRange, rangeY: mathRange };
+            
+            let projRange = (projMax - projMin) * 1.1; 
+            if (projRange < 1e-9) projRange = 1;
+            const projCenter = (projMin + projMax) / 2;
+            projectionBounds = { min: projCenter - projRange / 2, range: projRange };
+
+            calculateAndDrawProjection(); 
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            x = Math.random(); y = Math.random();
+            for(let i=0; i<100; i++) { [x, y] = functions[chooseFunctionByWeight()](x, y); }
+            draw();
+        }
+
+        lambdaSlider.addEventListener('input', restart);
+        thetaSlider.addEventListener('input', restart);
+        
+        // *** SỬA ĐỔI: Gọi hàm đặt công thức tĩnh một lần khi bắt đầu ***
+        setStaticFunctionDisplays();
+        restart();
+    </script>
+
+</body>
+</html>
